@@ -73,7 +73,7 @@ abstract final class AppTheme {
         trackHeight: 3,
         thumbShape: RoundSliderThumbShape(enabledThumbRadius: 5),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: AppColors.card,
         elevation: 0,
         shape: RoundedRectangleBorder(

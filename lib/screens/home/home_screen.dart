@@ -359,7 +359,7 @@ class _SpeedSelector extends StatelessWidget {
                     const SizedBox(width: 16),
                   const SizedBox(width: 8),
                   Text(
-                    '${s}×',
+                    '$s×',
                     style: s == currentSpeed
                         ? AppTextStyles.labelLarge
                             .copyWith(color: AppColors.primary)
@@ -382,7 +382,7 @@ class _SpeedSelector extends StatelessWidget {
                 size: 16, color: AppColors.textSecondary),
             const SizedBox(width: 6),
             Text(
-              '${currentSpeed}×',
+              '$currentSpeed×',
               style: AppTextStyles.labelLarge
                   .copyWith(color: AppColors.textSecondary),
             ),
