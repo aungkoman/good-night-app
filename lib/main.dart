@@ -1,6 +1,8 @@
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:goodnight/app.dart';
+import 'package:goodnight/services/audio_handler.dart';
 import 'package:goodnight/services/audio_service.dart';
 import 'package:goodnight/services/data_service.dart';
 import 'package:goodnight/services/preferences_service.dart';
@@ -10,9 +12,8 @@ import 'package:goodnight/services/preferences_service.dart';
 /// Initialization order:
 ///   1. SharedPreferences (synchronous-feeling, fast)
 ///   2. AudioSession configuration
-///   3. JSON asset load + parse (one-time, cached)
-///
-/// All three run in parallel via [Future.wait].
+///   3. AudioHandler for media controls (notification, lock screen)
+///   4. JSON asset load + parse (one-time, cached)
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -38,6 +39,19 @@ Future<void> main() async {
     AudioService.instance.initialize(),
     DataService.instance.load(),
   ]);
+
+  // Initialize audio handler for media controls
+  final audioHandler = AudioHandler(AudioService.instance.player);
+  await AudioService.init(
+    builder: () => audioHandler,
+    config: const AudioServiceConfig(
+      androidNotificationChannelId: 'mm.com.software100.goodnight.goodnight.channel.audio',
+      androidNotificationChannelName: 'Good Night Audio',
+      androidNotificationOngoing: true,
+      androidShowNotificationBadge: true,
+      androidNotificationIcon: 'mipmap/ic_launcher',
+    ),
+  );
 
   runApp(const GoodNightApp());
 }

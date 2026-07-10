@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:goodnight/models/dhamma_track.dart';
@@ -21,6 +22,11 @@ class PlayerProvider extends ChangeNotifier {
   final _audio = AudioService.instance;
   final _prefs = PreferencesService.instance;
   final _data = DataService.instance;
+  AudioHandler? _audioHandler;
+
+  set audioHandler(AudioHandler? handler) {
+    _audioHandler = handler;
+  }
 
   DhammaTrack? _currentTrack;
   PlayerStatus _status = PlayerStatus.idle;
