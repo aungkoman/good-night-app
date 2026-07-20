@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:goodnight/models/dhamma_track.dart';
 import 'package:goodnight/services/audio_service.dart';
-import 'package:goodnight/services/audio_handler.dart';
+import 'package:goodnight/services/media_notification_service.dart';
 import 'package:goodnight/services/preferences_service.dart';
 import 'package:goodnight/services/data_service.dart';
 import 'package:goodnight/core/constants/app_constants.dart';
@@ -12,49 +12,48 @@ enum PlayerStatus { idle, loading, playing, paused, error }
 
 /// Central state manager for all audio playback — the heart of the app.
 ///
-/// Exposes playback state to the UI via [ChangeNotifier] and delegates
-/// all audio operations to [AudioService].
-///
-/// Also wires the [GoodNightAudioHandler] skip callbacks so notification
-/// controls (prev/next) drive the same logic as in-app taps.
+/// Delegates audio I/O to [AudioService] (just_audio) and notification
+/// management to [MediaNotificationService] (native Android foreground service
+/// via MethodChannel).
 class PlayerProvider extends ChangeNotifier {
-  PlayerProvider({required GoodNightAudioHandler audioHandler})
-      : _audioHandler = audioHandler {
-    // Wire notification/lock-screen skip buttons → our logic
-    _audioHandler.onSkipNext = playNext;
-    _audioHandler.onSkipPrevious = playPrevious;
+  PlayerProvider() {
+    // Wire notification button taps → our playback methods
+    final notif = MediaNotificationService.instance;
+    notif.onPlay     = togglePlayPause;
+    notif.onPause    = togglePlayPause;
+    notif.onNext     = playNext;
+    notif.onPrevious = playPrevious;
     _initStreams();
   }
 
   final _audio = AudioService.instance;
   final _prefs = PreferencesService.instance;
-  final _data = DataService.instance;
-  final GoodNightAudioHandler _audioHandler;
+  final _data  = DataService.instance;
 
   DhammaTrack? _currentTrack;
-  PlayerStatus _status = PlayerStatus.idle;
-  Duration _position = Duration.zero;
-  Duration _duration = Duration.zero;
-  double _speed = AppConstants.defaultSpeed;
-  Set<String> _favorites = {};
-  Timer? _sleepTimer;
-  Timer? _sleepCountdown;
-  int _sleepMinutes = 0;
-  int _sleepRemainingSec = 0;
+  PlayerStatus _status  = PlayerStatus.idle;
+  Duration     _position = Duration.zero;
+  Duration     _duration = Duration.zero;
+  double       _speed   = AppConstants.defaultSpeed;
+  Set<String>  _favorites = {};
+  Timer?       _sleepTimer;
+  Timer?       _sleepCountdown;
+  int          _sleepMinutes    = 0;
+  int          _sleepRemainingSec = 0;
 
   final List<StreamSubscription<dynamic>> _subscriptions = [];
 
   // ── Getters ────────────────────────────────────────────────────────────────
-  DhammaTrack? get currentTrack => _currentTrack;
-  PlayerStatus get status => _status;
-  Duration get position => _position;
-  Duration get duration => _duration;
-  double get speed => _speed;
+  DhammaTrack? get currentTrack     => _currentTrack;
+  PlayerStatus get status           => _status;
+  Duration     get position         => _position;
+  Duration     get duration         => _duration;
+  double       get speed            => _speed;
   bool get isFavorite =>
       _currentTrack != null && _favorites.contains(_currentTrack!.id);
-  int get sleepMinutes => _sleepMinutes;
-  int get sleepRemainingSec => _sleepRemainingSec;
-  bool get hasSleepTimer => _sleepMinutes > 0;
+  int  get sleepMinutes      => _sleepMinutes;
+  int  get sleepRemainingSec => _sleepRemainingSec;
+  bool get hasSleepTimer     => _sleepMinutes > 0;
 
   // ── Stream subscriptions ───────────────────────────────────────────────────
 
@@ -83,6 +82,7 @@ class PlayerProvider extends ChangeNotifier {
         _status = PlayerStatus.loading;
       case ProcessingState.ready:
         _status = state.playing ? PlayerStatus.playing : PlayerStatus.paused;
+        _syncNotification();          // keep notification in sync on play/pause
       case ProcessingState.completed:
         _playNext(auto: true);
         return;
@@ -97,7 +97,7 @@ class PlayerProvider extends ChangeNotifier {
   Future<void> initialize() async {
     _favorites = _prefs.getFavorites();
     final lastId = _prefs.getLastTrackId();
-    final track = lastId != null
+    final track  = lastId != null
         ? _data.findById(lastId)
         : _data.collections.first.tracks.first;
     await playTrack(track ?? _data.collections.first.tracks.first);
@@ -105,29 +105,26 @@ class PlayerProvider extends ChangeNotifier {
 
   Future<void> playTrack(DhammaTrack track) async {
     _currentTrack = track;
-    _status = PlayerStatus.loading;
-    _position = Duration.zero;
-    _duration = Duration.zero;
+    _status       = PlayerStatus.loading;
+    _position     = Duration.zero;
+    _duration     = Duration.zero;
     notifyListeners();
 
     await _audio.loadTrack(track);
-
-    // Update the OS media session notification with track metadata
-    _audioHandler.updateTrack(track);
+    _syncNotification();          // show notification with new track metadata
 
     await _prefs.addRecentlyPlayed(track.id);
     await _prefs.saveLastTrack(track.id, 0);
   }
 
   Future<void> togglePlayPause() => _audio.togglePlayPause();
-  Future<void> skipForward() => _audio.skipForward();
-  Future<void> skipBackward() => _audio.skipBackward();
+  Future<void> skipForward()     => _audio.skipForward();
+  Future<void> skipBackward()    => _audio.skipBackward();
 
   Future<void> seek(double ratio) async {
     if (_duration == Duration.zero) return;
     final ms = (ratio * _duration.inMilliseconds).clamp(
-      0,
-      _duration.inMilliseconds,
+      0, _duration.inMilliseconds,
     );
     await _audio.seek(Duration(milliseconds: ms.toInt()));
   }
@@ -144,13 +141,13 @@ class PlayerProvider extends ChangeNotifier {
   void setSleepTimer(int minutes) {
     _sleepTimer?.cancel();
     _sleepCountdown?.cancel();
-    _sleepMinutes = minutes;
+    _sleepMinutes    = minutes;
     _sleepRemainingSec = minutes * 60;
 
     if (minutes > 0) {
       _sleepTimer = Timer(Duration(minutes: minutes), () {
         _audio.pause();
-        _sleepMinutes = 0;
+        _sleepMinutes    = 0;
         _sleepRemainingSec = 0;
         notifyListeners();
       });
@@ -164,14 +161,14 @@ class PlayerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void playNext() => _playNext();
+  void playNext()     => _playNext();
   void playPrevious() => _playPrev();
 
   void _playNext({bool auto = false}) {
     final track = _currentTrack;
     if (track == null) return;
     final collection = _data.collections[track.collectionIndex];
-    final nextIndex = track.trackIndex + 1;
+    final nextIndex  = track.trackIndex + 1;
     if (nextIndex < collection.tracks.length) {
       playTrack(collection.tracks[nextIndex]);
     }
@@ -180,17 +177,31 @@ class PlayerProvider extends ChangeNotifier {
   void _playPrev() {
     final track = _currentTrack;
     if (track == null) return;
-    // If more than 3s in, restart track; else go to previous
     if (_position.inSeconds > 3) {
       _audio.seek(Duration.zero);
       return;
     }
     final collection = _data.collections[track.collectionIndex];
-    final prevIndex = track.trackIndex - 1;
+    final prevIndex  = track.trackIndex - 1;
     if (prevIndex >= 0) {
       playTrack(collection.tracks[prevIndex]);
     }
   }
+
+  // ── Notification sync ──────────────────────────────────────────────────────
+
+  /// Push current track metadata + playback state to the Android notification.
+  void _syncNotification() {
+    final track = _currentTrack;
+    if (track == null) return;
+    MediaNotificationService.instance.updateNotification(
+      title:     track.label,
+      artist:    track.sayadawName,
+      isPlaying: _status == PlayerStatus.playing,
+    );
+  }
+
+  // ── Dispose ────────────────────────────────────────────────────────────────
 
   @override
   void dispose() {
@@ -199,6 +210,7 @@ class PlayerProvider extends ChangeNotifier {
     for (final sub in _subscriptions) {
       sub.cancel();
     }
+    MediaNotificationService.instance.stopNotification();
     super.dispose();
   }
 }
