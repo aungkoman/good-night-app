@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -186,8 +187,12 @@ class GoodNightMediaService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // Decode the full-colour launcher icon as the large (visible) notification icon
+        val appIcon = BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_notification)  // monochrome moon for status bar
+            .setLargeIcon(appIcon)                     // full-colour app icon in notification card
             .setContentTitle(currentTitle)
             .setContentText(currentArtist)
             .setContentIntent(contentIntent)
