@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:goodnight/models/dhamma_track.dart';
 import 'package:goodnight/services/audio_service.dart';
+import 'package:goodnight/services/audio_handler.dart';
 import 'package:goodnight/services/preferences_service.dart';
 import 'package:goodnight/services/data_service.dart';
 import 'package:goodnight/core/constants/app_constants.dart';
@@ -14,19 +14,22 @@ enum PlayerStatus { idle, loading, playing, paused, error }
 ///
 /// Exposes playback state to the UI via [ChangeNotifier] and delegates
 /// all audio operations to [AudioService].
+///
+/// Also wires the [GoodNightAudioHandler] skip callbacks so notification
+/// controls (prev/next) drive the same logic as in-app taps.
 class PlayerProvider extends ChangeNotifier {
-  PlayerProvider() {
+  PlayerProvider({required GoodNightAudioHandler audioHandler})
+      : _audioHandler = audioHandler {
+    // Wire notification/lock-screen skip buttons → our logic
+    _audioHandler.onSkipNext = playNext;
+    _audioHandler.onSkipPrevious = playPrevious;
     _initStreams();
   }
 
   final _audio = AudioService.instance;
   final _prefs = PreferencesService.instance;
   final _data = DataService.instance;
-  AudioHandler? _audioHandler;
-
-  set audioHandler(AudioHandler? handler) {
-    _audioHandler = handler;
-  }
+  final GoodNightAudioHandler _audioHandler;
 
   DhammaTrack? _currentTrack;
   PlayerStatus _status = PlayerStatus.idle;
@@ -108,6 +111,10 @@ class PlayerProvider extends ChangeNotifier {
     notifyListeners();
 
     await _audio.loadTrack(track);
+
+    // Update the OS media session notification with track metadata
+    _audioHandler.updateTrack(track);
+
     await _prefs.addRecentlyPlayed(track.id);
     await _prefs.saveLastTrack(track.id, 0);
   }

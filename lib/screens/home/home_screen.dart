@@ -192,33 +192,43 @@ class _PlayerContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final track = player.currentTrack!;
-    final screenHeight = MediaQuery.sizeOf(context).height;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Column(
-        children: [
-          SizedBox(height: screenHeight * 0.04),
-          // Artwork
-          NowPlayingArtwork(
-            collectionIndex: track.collectionIndex,
-            isPlaying: player.status == PlayerStatus.playing,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final h = constraints.maxHeight;
+        final artworkSize = (h * 0.30).clamp(180.0, 300.0);
+        final vGap = (h * 0.035).clamp(8.0, 28.0);
+        final smallGap = (h * 0.022).clamp(6.0, 20.0);
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(height: vGap),
+              // Artwork
+              NowPlayingArtwork(
+                collectionIndex: track.collectionIndex,
+                isPlaying: player.status == PlayerStatus.playing,
+                size: artworkSize,
+              ),
+              SizedBox(height: vGap),
+              // Track info
+              _TrackInfo(track: track),
+              SizedBox(height: smallGap),
+              // Seek bar
+              _SeekBar(player: player),
+              SizedBox(height: smallGap),
+              // Playback controls
+              PlaybackControls(player: player),
+              SizedBox(height: smallGap * 0.8),
+              // Bottom actions: speed + favorite
+              _BottomActions(player: player),
+              SizedBox(height: vGap),
+            ],
           ),
-          SizedBox(height: screenHeight * 0.04),
-          // Track info
-          _TrackInfo(track: track),
-          const SizedBox(height: 28),
-          // Seek bar
-          _SeekBar(player: player),
-          const SizedBox(height: 28),
-          // Playback controls
-          PlaybackControls(player: player),
-          const SizedBox(height: 24),
-          // Bottom actions: speed + favorite
-          _BottomActions(player: player),
-          const SizedBox(height: 32),
-        ],
-      ),
+        );
+      },
     );
   }
 }
